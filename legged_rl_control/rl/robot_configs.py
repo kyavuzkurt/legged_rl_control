@@ -10,33 +10,26 @@ class RobotConfig:
     joint_speed_limits: dict = None
 
 # Configuration for Unitree A1
-A1_CONFIG = RobotConfig(
-    model_path=os.path.join(
+A1_CONFIG = {
+    "model_path": os.path.join(
         get_package_share_directory('legged_rl_control'),
-        'config/robots/a1.xml'
+        'config/scene.xml'
     ),
-    observation_exclusions=('base_pos', 'base_orn', 'base_vel'),
-    action_dim=12,
-    joint_speed_limits={
-        # Front Right leg
-        'FR_hip_joint': 8.0,
-        'FR_thigh_joint': 8.0,
-        'FR_knee_joint': 8.0,
-        'FR_ankle_joint': 8.0,
-        # Front Left leg
-        'FL_hip_joint': 8.0,
-        'FL_thigh_joint': 8.0,
-        'FL_knee_joint': 8.0,
-        'FL_ankle_joint': 8.0,
-        # Rear Right leg
-        'RR_hip_joint': 8.0,
-        'RR_thigh_joint': 8.0,
-        'RR_knee_joint': 8.0,
-        'RR_ankle_joint': 8.0,
-        # Rear Left leg
-        'RL_hip_joint': 8.0,
-        'RL_thigh_joint': 8.0,
-        'RL_knee_joint': 8.0,
-        'RL_ankle_joint': 8.0,
-    }
-) 
+    "control_dims": 12,          # Number of controllable joints
+    "action_scale": 0.5,         # Scaling factor for actions
+    "obs_dim": 48,               # Should match sensor data dimensions
+    "num_actions": 12,           # Must match robot's actuated DOF
+    "min_base_height": 0.2,      # Minimum base height before termination
+    "reward_weights": {
+        "forward_velocity": 1.0,
+        "joint_torque": -0.01,
+        "action_rate": -0.1,
+        "foot_slip": -0.5
+    },
+    "sim_params": {
+        "physics_engine": "MuJoCo",  # Or your simulator
+        "control_freq": 100,     # Hz
+        "decimation": 4,         # Policy runs at 25Hz
+    },
+    "observation_exclusions": ['base_pos', 'base_orn'],
+} 

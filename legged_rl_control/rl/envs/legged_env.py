@@ -4,48 +4,71 @@ import mujoco
 from legged_rl_control.nodes.mujoco_sim import MujocoSimulator
 from legged_rl_control.rl.robot_configs import RobotConfig
 from legged_rl_control.utils.quat_to_euler import quat_to_euler
+from gymnasium import spaces
+
 class LeggedEnv(gym.Env):
-    def __init__(self, config: RobotConfig):
+    def __init__(self, config):
         self.config = config
-        self.sim = MujocoSimulator(config.model_path)
+        self.sim = MujocoSimulator(config["model_path"])
         self._setup_spaces()
         self.stationary_steps = 0
         self.min_base_height = 0.2  # Minimum acceptable base height in meters
+        # Initialize Mujoco model/data from simulator
+        self.model = self.sim.model
+        self.data = self.sim.data
         
     def _setup_spaces(self):
         obs_size = len(self._get_obs())
-        self.observation_space = gym.spaces.Box(
+        self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_size,))
-        self.action_space = gym.spaces.Box(
-            low=-1.0, high=1.0, shape=(self.config.action_dim,))
+        self.action_space = spaces.Box(
+            low=-1.0, high=1.0, shape=(self.config["num_actions"],))
 
     def _get_obs(self):
+        # Collect raw sensor data
+        qpos = self.sim.data.qpos.copy()        # Joint positions
+        qvel = self.sim.data.qvel.copy()        # Joint velocities
+        imu_acc = self.sim.data.sensor('imu_acc').data.copy()
+        imu_gyro = self.sim.data.sensor('imu_gyro').data.copy()
+        
+        # Create raw observation vector
         raw_obs = np.concatenate([
-            self.sim.data.qpos,
-            self.sim.data.qvel,
-            self.sim.data.sensor('imu_acc').data,
-            self.sim.data.sensor('imu_gyro').data
+            qpos,
+            qvel,
+            imu_acc,
+            imu_gyro
         ])
+        
+        # Apply filtering and return processed observation
         return self._filter_obs(raw_obs)
 
     def _filter_obs(self, obs):
-        # Implement exclusion logic based on config
-        # ...
-        pass
+        # Implement basic filtering - remove excluded observations
+        # Example: Remove base position (first 3 elements) if configured
+        if "base_pos" in self.config.get("observation_exclusions", []):
+            obs = obs[3:]
+        
+        # Ensure we return a numpy array with proper dimensions
+        return obs.astype(np.float32)
 
     def step(self, action):
         self.sim.data.ctrl[:] = action
         self.sim.sim_step()
         
-        # Calculate reward and done condition
         reward = self._calculate_reward()
-        done = self._check_done()
+        terminated = self._check_done()
+        truncated = False  # Timeout handling can be added here
+        info = {}
         
-        return self._get_obs(), reward, done, {}
+        return self._get_obs(), reward, terminated, truncated, info
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
         mujoco.mj_resetData(self.model, self.data)
-        return self._get_obs()
+        self.sim.advance()  # Ensure simulation state is updated
+        observation = self._get_obs()
+        info = {"reset_reason": "initial"}
+        return observation, info
 
     def _calculate_reward(self):
         # Get base linear and angular velocities from simulation
@@ -79,7 +102,7 @@ class LeggedEnv(gym.Env):
             
         # 2. Base height check (fall condition)
         base_height = self.sim.data.qpos[2]  # Z position of base
-        if base_height < self.config.min_base_height:
+        if base_height < self.config["min_base_height"]:
             return True
             
         # 3. Stationary timeout check (velocity magnitude)

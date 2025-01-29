@@ -78,10 +78,13 @@ class MujocoSimulator(Node):
         self.imu_pub.publish(imu_msg)
 
     def sim_step(self):
-        if not hasattr(self, 'paused') or not self.paused:
-            mujoco.mj_step(self.model, self.data)
+        mujoco.mj_step(self.model, self.data)
         self.publish_sensor_data()
         self.viewer.sync()
+
+    def advance(self):
+        """Update internal state after reset"""
+        mujoco.mj_forward(self.model, self.data)
 
 def main(args=None):
     rclpy.init(args=args)

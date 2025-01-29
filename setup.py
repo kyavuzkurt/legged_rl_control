@@ -20,7 +20,16 @@ setup(
         (os.path.join('share', package_name, 'config', 'assets'), 
          glob('config/assets/**/*', recursive=True)),
     ],
-    install_requires=['setuptools'],
+    install_requires=[
+        'setuptools',
+        'rclpy',
+        'stable_baselines3',
+        'numpy',
+        'gym==0.21.0',
+        'pybullet',
+        'torch',
+        'tensorboard'
+    ],
     zip_safe=True,
     maintainer='Kadir Yavuz Kurt',
     maintainer_email='k.yavuzkurt1@gmail.com',

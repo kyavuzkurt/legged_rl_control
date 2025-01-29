@@ -1,3 +1,4 @@
+import numpy as np
 def quat_to_euler(q):
     """Convert quaternion [w,x,y,z] to Euler angles (roll, pitch, yaw)"""
     # Implementation of the conversion
