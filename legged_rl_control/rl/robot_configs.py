@@ -31,6 +31,7 @@ A1_CONFIG = {
         "physics_engine": "MuJoCo",  # Or your simulator
         "control_freq": 100,     # Hz
         "decimation": 4,         # Policy runs at 25Hz
+        "max_episode_steps": 1000  # 10 seconds at 100Hz
     },
     "observation_exclusions": ['base_pos', 'base_orn'],
     "reward_components": {

@@ -5,7 +5,7 @@ from legged_rl_control.nodes.mujoco_sim import MujocoSimulator
 from legged_rl_control.rl.robot_configs import RobotConfig
 from legged_rl_control.utils.quat_to_euler import quat_to_euler
 from gymnasium import spaces
-from collections import deque
+from collections import deque, defaultdict
 
 class LeggedEnv(gym.Env):
     def __init__(self, config):
@@ -26,6 +26,9 @@ class LeggedEnv(gym.Env):
         self.action_variance_threshold = term_config.get("action_variance_threshold", 0.1)
         self.standing_still_timer = 0.0
         self.dt = 1.0 / config["sim_params"]["control_freq"]
+        self._max_episode_steps = config.get("max_episode_steps", 1000)
+        self.steps = 0  # Add step counter
+        self.termination_reasons = defaultdict(int)  # Track reasons for termination
         
     def _setup_spaces(self):
         obs_size = len(self._get_obs())
@@ -62,6 +65,7 @@ class LeggedEnv(gym.Env):
         self.sim.data.ctrl[:] = action
         self.sim.sim_step()
         
+        self.steps += 1  # Increment step counter
         reward = self._calculate_reward()
         terminated = self._check_done()
         truncated = self._get_truncated(self._get_obs(), action)
@@ -98,10 +102,10 @@ class LeggedEnv(gym.Env):
         super().reset(seed=seed)
         mujoco.mj_resetData(self.model, self.data)
         self.sim.advance()  # Ensure simulation state is updated
-        observation = self._get_obs()
+        self.steps = 0  # Reset step counter
         self.action_buffer.clear()
         info = {"reset_reason": "initial"}
-        return observation, info
+        return self._get_obs(), info
 
     def _calculate_reward(self):
         """Modular reward calculation for standing behavior with leg hops"""

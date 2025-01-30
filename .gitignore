@@ -64,3 +64,14 @@ MUJOCO_LOG.TXT
 # Misc
 .DS_Store
 *.log
+*.aux
+*.out
+*.bbl
+*.blg
+*.toc
+*.lof
+*.lot
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.tex
