@@ -19,7 +19,8 @@ def generate_launch_description():
             name='a1_simulator',
             output='screen',
             parameters=[{
-                'model_path': mjcf_path
+                'model_path': mjcf_path,
+                'launch_viewer': True  # Enable viewer for evaluation
             }]
         ),
         Node(

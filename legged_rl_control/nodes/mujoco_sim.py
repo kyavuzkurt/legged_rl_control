@@ -9,7 +9,7 @@ from mujoco import viewer
 from std_msgs.msg import String
 
 class MujocoSimulator(Node):
-    def __init__(self, model_path):
+    def __init__(self, model_path, launch_viewer=False):
         super().__init__('mujoco_simulator')
         # Set asset directory via environment variable
         os.environ['MUJOCO_ASSETSDIR'] = os.path.join(
@@ -27,8 +27,13 @@ class MujocoSimulator(Node):
         self.timer = self.create_timer(0.001, self.sim_step)
         self._init_joint_mapping()
 
-        # Add MuJoCo visualization
-        self.viewer = viewer.launch_passive(self.model, self.data)
+        # Use direct parameter
+        if launch_viewer:
+            self.get_logger().info("Launching MuJoCo viewer")
+            self.viewer = viewer.launch_passive(self.model, self.data)
+        else:
+            self.viewer = None
+            self.get_logger().info("Running in headless mode")
 
     def _init_joint_mapping(self):
         self.joint_map = {}
@@ -80,7 +85,8 @@ class MujocoSimulator(Node):
     def sim_step(self):
         mujoco.mj_step(self.model, self.data)
         self.publish_sensor_data()
-        self.viewer.sync()
+        if self.viewer:
+            self.viewer.sync()
 
     def advance(self):
         """Update internal state after reset"""

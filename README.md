@@ -1,5 +1,5 @@
 # Legged RL Control (WIP)
-ROS 2 package for modular reinforcement learning-based control of legged robots using MuJoCo.
+ROS 2 package for reinforcement learning-based control of legged robots using MuJoCo.
 
 This package is a work in progress and is not ready for production use. 
 

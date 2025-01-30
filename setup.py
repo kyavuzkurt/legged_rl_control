@@ -12,12 +12,12 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         (os.path.join('share', package_name), ['package.xml', 'setup.cfg']),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
-        (os.path.join('share', package_name, 'config',), 
-         glob('config/*.xml')),
-        (os.path.join('share', package_name, 'config'), 
-         glob('config/*.xml')),
-        (os.path.join('share', package_name, 'config', 'assets'), 
+        (os.path.join('share', package_name, 'launch'), 
+         glob('launch/*.launch.py')),
+        (os.path.join('share', package_name, 'config'),
+         glob('config/*.xml') + 
+         glob('config/**/*.xml', recursive=True)),
+        (os.path.join('share', package_name, 'config/assets'),
          glob('config/assets/**/*', recursive=True)),
     ],
     install_requires=[
@@ -28,7 +28,9 @@ setup(
         'gym==0.21.0',
         'pybullet',
         'torch',
-        'tensorboard'
+        'tensorboard',
+        'matplotlib',
+        'pandas'
     ],
     zip_safe=True,
     maintainer='Kadir Yavuz Kurt',
