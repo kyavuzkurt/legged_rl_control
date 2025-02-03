@@ -2,10 +2,10 @@ import gymnasium as gym
 import numpy as np
 import mujoco
 from legged_rl_control.nodes.mujoco_sim import MujocoSimulator
-from legged_rl_control.rl.robot_configs import RobotConfig
 from legged_rl_control.utils.quat_to_euler import quat_to_euler
 from gymnasium import spaces
 from collections import deque, defaultdict
+from legged_rl_control.rl.wrappers.normalize_observation import NormalizeObservation
 
 class LeggedEnv(gym.Env):
     def __init__(self, config):
@@ -159,17 +159,33 @@ class LeggedEnv(gym.Env):
         return -np.sum(np.square(self.sim.data.ctrl))  # L2 penalty on actions
 
     def _symmetry_reward(self):
-        """Reward for symmetric leg movements (front/hind pairs)"""
-        # Assuming 3 joints per leg and base qpos at start
+        """Reward for symmetric leg movements (multiple symmetry types)"""
         num_joints = self.config.get("num_joints_per_leg", 3)
         fl = self.sim.data.qpos[7:7+num_joints]          # Front left
         fr = self.sim.data.qpos[7+num_joints:7+2*num_joints]  # Front right
         hl = self.sim.data.qpos[7+2*num_joints:7+3*num_joints] # Hind left
         hr = self.sim.data.qpos[7+3*num_joints:7+4*num_joints] # Hind right
         
-        front_diff = np.sum(np.square(fl - fr))
-        hind_diff = np.sum(np.square(hl - hr))
-        return -0.1*(front_diff + hind_diff)  # Penalize asymmetry
+        front_diff = np.sum(np.square(fl - fr))          # Front pair symmetry
+        hind_diff = np.sum(np.square(hl - hr))           # Hind pair symmetry
+        left_diff = np.sum(np.square(fl - hl))           # Left side symmetry
+        right_diff = np.sum(np.square(fr - hr))          # Right side symmetry
+        diagonal1_diff = np.sum(np.square(fl - hr))      # Diagonal symmetry 1
+        diagonal2_diff = np.sum(np.square(fr - hl))      # Diagonal symmetry 2
+        
+        # Combine with configurable weights from robot config
+        symmetry_weights = self.config.get("symmetry_weights", {
+            'front': 0.4,
+            'hind': 0.4,
+            'left_right': 0.1,
+            'diagonal': 0.1
+        })
+        
+        return -(
+            symmetry_weights['front'] * (front_diff + hind_diff) +
+            symmetry_weights['hind'] * (left_diff + right_diff) +
+            symmetry_weights['diagonal'] * (diagonal1_diff + diagonal2_diff)
+        )
 
     def _leg_activity_reward(self):
         """Encourage leg movement through joint velocity reward"""
@@ -188,3 +204,17 @@ class LeggedEnv(gym.Env):
             base_height < self.config["min_base_height"] or
             self.step_count >= self.config["max_episode_length"]
         )
+
+def make_env(config):
+    """Factory function for creating wrapped environments"""
+    env = LeggedEnv(config)
+    
+    # Apply observation normalization if enabled
+    if config.get("observation_normalization", {}).get("enabled", False):
+        env = NormalizeObservation(env,
+            epsilon=config["observation_normalization"].get("epsilon", 1e-8),
+            clip=config["observation_normalization"].get("clip", 10.0),
+            update_stats=config["observation_normalization"].get("update_during_training", True)
+        )
+    
+    return env

@@ -34,7 +34,7 @@ python3 src/legged_rl_control/scripts/train_a1.py
 
 
 ## TODO
-- Add observation space normalization and domain randomization
+- Add ~~observation space normalization~~ and domain randomization
 - Implement curriculum learning and safety monitoring
 - Improve reward function and policy deployment
 - Add visualization tools and hardware interface
