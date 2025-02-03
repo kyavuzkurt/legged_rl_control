@@ -1,0 +1,19 @@
+# Robot-specific configuration
+num_actions: 12
+obs_dim: 36
+model_path: "config/scene.xml"
+sim_params:
+  control_freq: 20
+  launch_viewer: false
+
+# Base stability parameters
+min_base_height: 0.15  # Minimum allowable base height in meters
+max_episode_length: 1000  # Maximum steps per episode
+
+termination_conditions:
+  max_standing_still_duration: 5.0  # Seconds allowed without movement
+  max_episode_steps: 1000
+  min_base_height: 0.2
+  action_buffer_size: 10
+  standing_still_threshold: 0.1
+  action_variance_threshold: 0.1 

@@ -9,11 +9,17 @@ from collections import deque, defaultdict
 
 class LeggedEnv(gym.Env):
     def __init__(self, config):
-        self.config = config
+        # Add default values for critical parameters
+        self.config = {
+            "min_base_height": 0.15,
+            "max_episode_length": 1000,
+            **config  # User config overrides defaults
+        }
         self.sim = MujocoSimulator(
-            config["model_path"],
-            launch_viewer=config.get("launch_viewer", False)
+            self.config["model_path"],
+            self.config.get("render", False)
         )
+        self.step_count = 0  # Initialize step counter here
         self._setup_spaces()
         self.stationary_steps = 0
         self.min_base_height = 0.2  # Minimum acceptable base height in meters
@@ -65,7 +71,7 @@ class LeggedEnv(gym.Env):
         self.sim.data.ctrl[:] = action
         self.sim.sim_step()
         
-        self.steps += 1  # Increment step counter
+        self.step_count += 1  # Increment step counter
         reward = self._calculate_reward()
         terminated = self._check_done()
         truncated = self._get_truncated(self._get_obs(), action)
@@ -83,8 +89,11 @@ class LeggedEnv(gym.Env):
         else:
             self.standing_still_timer = 0.0
             
-        # Check time-based standing still
-        if self.standing_still_timer >= self.config["termination_conditions"]["max_standing_still_duration"]:
+        # Check time-based standing still with safety get()
+        max_still_time = self.config["termination_conditions"].get(
+            "max_standing_still_duration", 5.0
+        )
+        if self.standing_still_timer >= max_still_time:
             self.termination_reasons['prolonged_inactivity'] += 1
             truncated = True
             
@@ -102,7 +111,7 @@ class LeggedEnv(gym.Env):
         super().reset(seed=seed)
         mujoco.mj_resetData(self.model, self.data)
         self.sim.advance()  # Ensure simulation state is updated
-        self.steps = 0  # Reset step counter
+        self.step_count = 0  # Reset step counter here
         self.action_buffer.clear()
         info = {"reset_reason": "initial"}
         return self._get_obs(), info
@@ -168,31 +177,14 @@ class LeggedEnv(gym.Env):
         return np.mean(np.abs(joint_velocities))  # Encourage some movement
 
     def _check_done(self):
-        # Get orientation from IMU (quaternion [w,x,y,z])
-        orientation = self.sim.data.sensor('imu_orn').data
-        
-        # Convert quaternion to Euler angles (roll, pitch, yaw)
-        roll, pitch, _ = quat_to_euler(orientation)
-        
-        # 1. Orientation check (fall condition)
-        max_tilt = 0.5  # ~30 degrees in radians
-        if abs(roll) > max_tilt or abs(pitch) > max_tilt:
-            return True
-            
-        # 2. Base height check (fall condition)
-        base_height = self.sim.data.qpos[2]  # Z position of base
-        if base_height < self.config["min_base_height"]:
-            return True
-            
-        # 3. Stationary timeout check (velocity magnitude)
-        lin_vel = self.sim.data.qvel[0:3]
-        vel_magnitude = np.linalg.norm(lin_vel)
-        
-        if vel_magnitude < 0.1:  # 0.1 m/s threshold
-            self.stationary_steps += 1
-            if self.stationary_steps > 200:  # 10 seconds at 20Hz
-                return True
-        else:
-            self.stationary_steps = 0
-            
-        return False
+        # Add configuration validation
+        required_keys = ['min_base_height', 'max_episode_length']
+        for key in required_keys:
+            if key not in self.config:
+                raise KeyError(f"Missing required config key: {key}")
+
+        base_height = self.sim.get_base_height()
+        return (
+            base_height < self.config["min_base_height"] or
+            self.step_count >= self.config["max_episode_length"]
+        )

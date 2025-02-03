@@ -92,6 +92,19 @@ class MujocoSimulator(Node):
         """Update internal state after reset"""
         mujoco.mj_forward(self.model, self.data)
 
+    def get_base_height(self):
+        """Returns the z-position of the robot's base"""
+        return self.data.qpos[2]  # qpos format: [x, y, z, quat_w, quat_x, quat_y, quat_z]
+    
+    # Add other essential accessors
+    def get_base_orientation(self):
+        """Returns base orientation as quaternion (w, x, y, z)"""
+        return self.data.qpos[3:7]
+    
+    def get_joint_positions(self):
+        """Returns all joint positions excluding base coordinates"""
+        return self.data.qpos[7:]  # Skip base pos/orientation
+
 def main(args=None):
     rclpy.init(args=args)
     node = MujocoSimulator(

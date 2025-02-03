@@ -19,6 +19,10 @@ setup(
          glob('config/**/*.xml', recursive=True)),
         (os.path.join('share', package_name, 'config/assets'),
          glob('config/assets/**/*', recursive=True)),
+        (os.path.join('share', package_name, 'config/robots'), 
+         glob('config/robots/*.yaml')),
+        (os.path.join('share', package_name, 'config/training'), 
+         glob('config/training/*.yaml')),
     ],
     install_requires=[
         'setuptools',
@@ -30,7 +34,8 @@ setup(
         'torch',
         'tensorboard',
         'matplotlib',
-        'pandas'
+        'pandas',
+        'pyyaml'
     ],
     zip_safe=True,
     maintainer='Kadir Yavuz Kurt',

@@ -1,39 +1,59 @@
 import rclpy
+import yaml
+from pathlib import Path
+from ament_index_python.packages import get_package_share_directory
 from legged_rl_control.rl.envs.legged_env import LeggedEnv
-from legged_rl_control.rl.robot_configs import A1_CONFIG
 from stable_baselines3 import SAC
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback
 from legged_rl_control.utils.logger import TrainingLogger
 import numpy as np
+import torch
+
+def load_config():
+    pkg_path = get_package_share_directory('legged_rl_control')
+    
+    # Load robot config
+    robot_config_path = Path(pkg_path) / 'config/robots/a1_config.yaml'
+    with open(robot_config_path) as f:
+        robot_config = yaml.safe_load(f)
+    
+    # Load training config
+    training_config_path = Path(pkg_path) / 'config/training/a1_training.yaml'
+    with open(training_config_path) as f:
+        training_config = yaml.safe_load(f)
+    
+    # Construct full path to scene.xml
+    robot_config["model_path"] = str(Path(pkg_path) / robot_config["model_path"])
+    
+    return robot_config, training_config
 
 def main():
     rclpy.init()
     
+    # Load configurations
+    robot_config, training_config = load_config()
+    
     # Validate environment configuration
-    assert A1_CONFIG["num_actions"] == 12, "A1 should have 12 actuators (3 joints per leg * 4 legs)"
-    assert A1_CONFIG["obs_dim"] == 36, "Observation dimension should match robot sensors"
+    assert robot_config["num_actions"] == 12, "A1 should have 12 actuators"
+    assert robot_config["obs_dim"] == 36, "Observation dimension mismatch"
     
-    # Create vectorized environment with Gymnasium compatibility
-    env = DummyVecEnv([lambda: LeggedEnv(A1_CONFIG)])
+    # Create environment
+    env = DummyVecEnv([lambda: LeggedEnv(robot_config)])
     
-    # Configure training parameters
+    # Configure SAC parameters
     model = SAC(
-        "MlpPolicy",
+        training_config["sac_params"]["policy"],
         env,
         verbose=1,
-        tensorboard_log="./a1_tensorboard/",
-        buffer_size=1_000_000,
-        learning_starts=10000,
-        batch_size=256,
-        device="auto",
+        **{k: v for k, v in training_config["sac_params"].items() if k != "policy"}
     )
     
-    # Save checkpoints every 100k steps
+    # Configure checkpoint callback
     checkpoint_callback = CheckpointCallback(
-        save_freq=100000,
-        save_path="./a1_checkpoints/",
-        name_prefix="a1_policy"
+        save_freq=training_config["checkpoint"]["save_freq"],
+        save_path=training_config["checkpoint"]["save_path"],
+        name_prefix=training_config["checkpoint"]["name_prefix"]
     )
     
     # Initialize logging
@@ -65,10 +85,15 @@ def main():
                     })
             return True
 
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"Current device: {torch.cuda.current_device()}")
+        print(f"Device name: {torch.cuda.get_device_name(0)}")
+
     try:
         model.learn(
-            total_timesteps=3_000_000,
-            callback=[checkpoint_callback, LoggingCallback()],  # Add our callback
+            total_timesteps=training_config["total_timesteps"],
+            callback=[checkpoint_callback, LoggingCallback()],
             tb_log_name="sac_a1",
             progress_bar=True
         )

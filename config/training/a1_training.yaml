@@ -1,0 +1,14 @@
+# Training parameters
+total_timesteps: 3000000
+checkpoint:
+  save_freq: 100000
+  save_path: "./a1_checkpoints/"
+  name_prefix: "a1_policy"
+
+sac_params:
+  policy: "MlpPolicy"
+  buffer_size: 1000000
+  learning_starts: 10000
+  batch_size: 256
+  device: "cuda"
+  tensorboard_log: "./a1_tensorboard/" 
