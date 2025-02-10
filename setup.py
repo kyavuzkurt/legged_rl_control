@@ -23,6 +23,8 @@ setup(
          glob('config/robots/*.yaml')),
         (os.path.join('share', package_name, 'config/training'), 
          glob('config/training/*.yaml')),
+        (os.path.join('share', package_name, 'config/controllers'), 
+         glob('config/controllers/*.yaml')),
     ],
     install_requires=[
         'setuptools',

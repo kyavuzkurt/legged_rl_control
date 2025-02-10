@@ -12,12 +12,13 @@ import torch
 
 # Configuration Management
 def load_configs(pkg_name='legged_rl_control'):
-    """Load robot and training configurations from YAML files"""
+    """Load configurations from YAML files"""
     pkg_path = get_package_share_directory(pkg_name)
     
     config_paths = {
         'robot': Path(pkg_path) / 'config/robots/a1_config.yaml',
-        'training': Path(pkg_path) / 'config/training/a1_training.yaml'
+        'training': Path(pkg_path) / 'config/training/a1_training.yaml',
+        'controller': Path(pkg_path) / 'config/controllers/pid.yaml'
     }
     
     configs = {}
@@ -27,7 +28,7 @@ def load_configs(pkg_name='legged_rl_control'):
     
     # Resolve model path
     configs['robot']["model_path"] = str(Path(pkg_path) / configs['robot']["model_path"])
-    return configs['robot'], configs['training']
+    return configs['robot'], configs['training'], configs['controller']
 
 def validate_environment_config(robot_config):
     """Validate critical environment parameters"""
@@ -36,9 +37,9 @@ def validate_environment_config(robot_config):
     assert Path(robot_config["model_path"]).exists(), "Model file not found"
 
 # Environment Setup
-def make_training_env(robot_config):
-    """Create and return training environment"""
-    return DummyVecEnv([lambda: LeggedEnv(robot_config)])
+def make_training_env(robot_config, controller_config):
+    """Create and return training environment with controller"""
+    return DummyVecEnv([lambda: LeggedEnv(robot_config, controller_config)])
 
 # Model Configuration
 def build_sac_model(env, training_config, device='auto'):
@@ -103,11 +104,11 @@ def train_agent():
     rclpy.init()
     
     # Load and validate configurations
-    robot_config, training_config = load_configs()
+    robot_config, training_config, controller_config = load_configs()
     validate_environment_config(robot_config)
 
     # Environment setup
-    env = make_training_env(robot_config)
+    env = make_training_env(robot_config, controller_config)
     
     # Model initialization
     model = build_sac_model(env, training_config, 

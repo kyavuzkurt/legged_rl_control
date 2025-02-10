@@ -1,0 +1,16 @@
+# PID Controller Parameters
+pid:
+  # Base parameters (can be overridden per-joint)
+  Kp: 1.2
+  Ki: 0.1
+  Kd: 0.05
+  output_limits: [-33.5, 33.5]  # Torque limits (N·m)
+  integral_clamp: [-5.0, 5.0]    # Anti-windup limits
+  
+  # Optional per-joint overrides
+  joint_overrides:
+    # Example format:
+    # FR_hip_joint:
+    #   Kp: 1.5
+    #   Ki: 0.2
+    #   output_limits: [-30, 30] 

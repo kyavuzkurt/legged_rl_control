@@ -6,9 +6,10 @@ from legged_rl_control.utils.quat_to_euler import quat_to_euler
 from gymnasium import spaces
 from collections import deque, defaultdict
 from legged_rl_control.rl.wrappers.normalize_observation import NormalizeObservation
+from legged_rl_control.controllers.pid_controller import create_pid_controllers_from_config
 
 class LeggedEnv(gym.Env):
-    def __init__(self, config):
+    def __init__(self, config, controller_config=None):
         # Add default values for critical parameters
         self.config = {
             "min_base_height": 0.15,
@@ -36,12 +37,21 @@ class LeggedEnv(gym.Env):
         self.steps = 0  # Add step counter
         self.termination_reasons = defaultdict(int)  # Track reasons for termination
         
+        # Initialize PID controllers
+        self.pid_controllers = create_pid_controllers_from_config(
+            controller_config=controller_config["pid"],
+            num_joints=self.config["num_actions"],
+            dt=self.dt
+        )
+        
+        # Modify action space to be position targets
+        self.action_space = spaces.Box(
+            low=-1.0, high=1.0, shape=(self.config["num_actions"],))
+
     def _setup_spaces(self):
         obs_size = len(self._get_obs())
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_size,))
-        self.action_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(self.config["num_actions"],))
 
     def _get_obs(self):
         # Collect raw sensor data
@@ -67,8 +77,23 @@ class LeggedEnv(gym.Env):
         return obs.astype(np.float32)
 
     def step(self, action):
-        self.action_buffer.append(action.copy())
-        self.sim.data.ctrl[:] = action
+        # Convert normalized actions to joint positions
+        joint_pos_targets = self._action_to_joint_positions(action)
+        
+        # Compute PID outputs
+        pid_outputs = np.zeros_like(action)
+        for i, pid in enumerate(self.pid_controllers):
+            current_pos = self.sim.data.qpos[7 + i]
+            current_vel = self.sim.data.qvel[6 + i]
+            pid_outputs[i] = pid.compute(
+                setpoint=joint_pos_targets[i],
+                measurement=current_pos,
+                measurement_deriv=current_vel
+            )
+        
+        # Apply PID outputs
+        self.action_buffer.append(pid_outputs.copy())
+        self.sim.data.ctrl[:] = pid_outputs
         self.sim.sim_step()
         
         self.step_count += 1  # Increment step counter
@@ -113,6 +138,9 @@ class LeggedEnv(gym.Env):
         self.sim.advance()  # Ensure simulation state is updated
         self.step_count = 0  # Reset step counter here
         self.action_buffer.clear()
+        # Reset PID controllers
+        for pid in self.pid_controllers:
+            pid.reset()
         info = {"reset_reason": "initial"}
         return self._get_obs(), info
 
@@ -204,6 +232,17 @@ class LeggedEnv(gym.Env):
             base_height < self.config["min_base_height"] or
             self.step_count >= self.config["max_episode_length"]
         )
+
+    def _action_to_joint_positions(self, action):
+        """Convert normalized actions to physical joint positions"""
+        joint_pos_targets = np.zeros_like(action)
+        for i in range(self.config["num_actions"]):
+            joint_id = i  # Assuming actuator order matches joint order
+            joint_range = self.model.jnt_range[joint_id]
+            joint_pos_targets[i] = (
+                (action[i] + 1) / 2 * (joint_range[1] - joint_range[0]) + joint_range[0]
+            )
+        return joint_pos_targets
 
 def make_env(config):
     """Factory function for creating wrapped environments"""
