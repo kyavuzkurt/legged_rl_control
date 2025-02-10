@@ -5,10 +5,11 @@ checkpoint:
   save_path: "./a1_checkpoints/"
   name_prefix: "a1_policy"
 
+num_envs: 7  # Set to number of CPU cores - 1 
 sac_params:
   policy: "MlpPolicy"
   buffer_size: 1000000
   learning_starts: 10000
-  batch_size: 256
+  batch_size: 1024  
   device: "cuda"
   tensorboard_log: "./a1_tensorboard/" 

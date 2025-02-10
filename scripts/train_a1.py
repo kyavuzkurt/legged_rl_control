@@ -4,11 +4,12 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from legged_rl_control.rl.envs.legged_env import LeggedEnv
 from stable_baselines3 import SAC
-from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
-from legged_rl_control.utils.logger import TrainingLogger
 import numpy as np
 import torch
+import os
+import argparse
 
 # Configuration Management
 def load_configs(pkg_name='legged_rl_control'):
@@ -37,9 +38,17 @@ def validate_environment_config(robot_config):
     assert Path(robot_config["model_path"]).exists(), "Model file not found"
 
 # Environment Setup
-def make_training_env(robot_config, controller_config):
-    """Create and return training environment with controller"""
-    return DummyVecEnv([lambda: LeggedEnv(robot_config, controller_config)])
+def make_training_env(robot_config, controller_config, num_envs=None):
+    """Create parallel environments with SubprocVecEnv"""
+    num_envs = num_envs or (os.cpu_count() - 1 or 1)
+    
+    # Use a factory function to ensure proper ROS initialization
+    def make_env():
+        rclpy.init()  # Initialize ROS context for each subprocess
+        env = LeggedEnv(robot_config, controller_config)
+        return env
+        
+    return SubprocVecEnv([make_env for _ in range(num_envs)])
 
 # Model Configuration
 def build_sac_model(env, training_config, device='auto'):
@@ -52,42 +61,8 @@ def build_sac_model(env, training_config, device='auto'):
         **{k: v for k, v in sac_params.items() if k != "policy"}
     )
 
-
 # Callbacks & Logging
-class TrainingMonitorCallback(BaseCallback):
-    """Custom callback for logging training metrics"""
-    def __init__(self, logger, window_size=10, verbose=0):
-        super().__init__(verbose)
-        self._logger = logger
-        self.window_size = window_size
-        self.episode_rewards = []
-        self.episode_lengths = []
-
-    def _on_step(self) -> bool:
-        if "episode" in self.locals:
-            self._update_metrics()
-            if len(self.episode_rewards) % self.window_size == 0:
-                self._log_metrics()
-        return True
-
-    def _update_metrics(self):
-        self.episode_rewards.append(self.locals['episode']['r'])
-        self.episode_lengths.append(self.locals['episode']['l'])
-
-    def _log_metrics(self):
-        metrics = {
-            'total_timesteps': self.num_timesteps,
-            'episode_reward_mean': np.mean(self.episode_rewards[-self.window_size:]),
-            'episode_len_mean': np.mean(self.episode_lengths[-self.window_size:]),
-            'value_loss': getattr(self.model, 'value_loss', 0.0).item(),
-            'policy_loss': getattr(self.model, 'policy_loss', 0.0).item(),
-            'entropy_coeff': getattr(self.model, 'ent_coef_tensor', 0.0).item(),
-            'alpha': getattr(self.model.log_alpha, 'exp', lambda: 0.0)().item(),
-            'grad_norm': getattr(self.model, 'grad_norm', 0.0)
-        }
-        self._logger.log_training(metrics)
-
-def setup_callbacks(training_config, logger):
+def setup_callbacks(training_config):
     """Create and return list of callbacks"""
     checkpoint_cb = CheckpointCallback(
         save_freq=training_config["checkpoint"]["save_freq"],
@@ -95,35 +70,33 @@ def setup_callbacks(training_config, logger):
         name_prefix=training_config["checkpoint"]["name_prefix"]
     )
     
-    monitor_cb = TrainingMonitorCallback(logger=logger)
-    return [checkpoint_cb, monitor_cb]
+    return [checkpoint_cb]
 
 # Main Training Logic
 def train_agent():
     """Main training workflow"""
-    rclpy.init()
-    
-    # Load and validate configurations
     robot_config, training_config, controller_config = load_configs()
     validate_environment_config(robot_config)
 
-    # Environment setup
-    env = make_training_env(robot_config, controller_config)
+    env = make_training_env(
+        robot_config, 
+        controller_config,
+        num_envs=training_config.get("num_envs", os.cpu_count() - 1)
+    )
     
-    # Model initialization
+    torch.set_num_threads(1)
+    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['MKL_NUM_THREADS'] = '1'
+
     model = build_sac_model(env, training_config, 
                            device=training_config["sac_params"].get("device", "auto"))
     
-    # Logging and callbacks
-    logger = TrainingLogger()
-    callbacks = setup_callbacks(training_config, logger)
+    callbacks = setup_callbacks(training_config)
 
-    # GPU diagnostics
     if torch.cuda.is_available():
         print(f"Training on {torch.cuda.get_device_name(0)}")
         torch.cuda.empty_cache()
 
-    # Training execution
     try:
         model.learn(
             total_timesteps=training_config["total_timesteps"],
@@ -134,7 +107,58 @@ def train_agent():
         model.save("a1_policy_final")
     finally:
         env.close()
-        rclpy.shutdown()
+
+def evaluate_policy(model_path, num_episodes=5):
+    """Evaluate trained policy with visualization"""
+    # Initialize ROS only if not already initialized
+    if not rclpy.ok():
+        rclpy.init()
+    
+    try:
+        # Load config with rendering enabled
+        robot_config, _, controller_config = load_configs()
+        robot_config["render"] = True
+        validate_environment_config(robot_config)
+
+        # Create single environment instance
+        env = LeggedEnv(robot_config, controller_config)
+        
+        try:
+            # Load trained model
+            model = SAC.load(model_path)
+            
+            for episode in range(num_episodes):
+                obs, _ = env.reset()
+                done = False
+                total_reward = 0
+                
+                while not done:
+                    action, _ = model.predict(obs, deterministic=True)
+                    obs, reward, terminated, truncated, _ = env.step(action)
+                    done = terminated or truncated
+                    total_reward += reward
+                    
+                print(f"Episode {episode+1}/{num_episodes}")
+                print(f"Total reward: {total_reward:.2f}")
+                print("="*40)
+                
+        finally:
+            env.close()
+            
+    finally:
+        # Ensure final shutdown
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
-    train_agent() 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--eval-with-visual', action='store_true',
+                       help='Run evaluation with MuJoCo visualization')
+    parser.add_argument('--model-path', type=str, default='a1_policy_final',
+                       help='Path to trained model zip file')
+    args = parser.parse_args()
+
+    if args.eval_with_visual:
+        evaluate_policy(args.model_path)
+    else:
+        train_agent() 

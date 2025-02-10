@@ -7,19 +7,30 @@ from gymnasium import spaces
 from collections import deque, defaultdict
 from legged_rl_control.rl.wrappers.normalize_observation import NormalizeObservation
 from legged_rl_control.controllers.pid_controller import create_pid_controllers_from_config
+from legged_rl_control.rl.wrappers.domain_randomization import DomainRandomizationWrapper
+import rclpy
 
 class LeggedEnv(gym.Env):
     def __init__(self, config, controller_config=None):
-        # Add default values for critical parameters
+        # Merge config with defaults
         self.config = {
-            "min_base_height": 0.15,
-            "max_episode_length": 1000,
-            **config  # User config overrides defaults
+            "render": False,
+            "num_actions": 12,
+            "obs_dim": 36,
+            **config
         }
-        self.sim = MujocoSimulator(
-            self.config["model_path"],
-            self.config.get("render", False)
-        )
+        
+        try:
+            self.sim = MujocoSimulator(
+                self.config["model_path"],
+                self.config.get("render", False)
+            )
+        except rclpy.exceptions.NotInitializedException:
+            rclpy.init()
+            self.sim = MujocoSimulator(
+                self.config["model_path"],
+                self.config.get("render", False)
+            )
         self.step_count = 0  # Initialize step counter here
         self._setup_spaces()
         self.stationary_steps = 0
@@ -244,6 +255,13 @@ class LeggedEnv(gym.Env):
             )
         return joint_pos_targets
 
+    def close(self):
+        """Clean up ROS 2 resources"""
+        if hasattr(self, 'sim'):
+            self.sim.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
 def make_env(config):
     """Factory function for creating wrapped environments"""
     env = LeggedEnv(config)
@@ -255,5 +273,10 @@ def make_env(config):
             clip=config["observation_normalization"].get("clip", 10.0),
             update_stats=config["observation_normalization"].get("update_during_training", True)
         )
+    
+    # Apply domain randomization if enabled
+    if config.get("domain_randomization", {}).get("enabled", False):
+        randomization_config = config["domain_randomization"].get("parameters", {})
+        env = DomainRandomizationWrapper(env, randomization_config)
     
     return env

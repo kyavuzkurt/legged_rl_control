@@ -24,3 +24,14 @@ observation_normalization:
   epsilon: 1e-8
   clip: 10.0
   update_during_training: true  # Disable during evaluation 
+
+domain_randomization:
+  enabled: true
+  parameters:
+    friction: [0.7, 1.3]  # Uniform range for friction coefficients
+    damping: [0.9, 1.1]
+    motor_strength: [0.8, 1.2]
+    body_mass: [0.9, 1.1]
+    sensor_noise: 0.05
+    latency: [0, 3]  # Random action delay between 0-3 steps
+    gravity: [-0.1, 0.1]  # 10% gravity perturbation 

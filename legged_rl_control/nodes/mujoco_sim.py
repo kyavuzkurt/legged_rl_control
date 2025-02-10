@@ -9,18 +9,24 @@ from mujoco import viewer
 from std_msgs.msg import String
 
 class MujocoSimulator(Node):
-    def __init__(self, model_path, launch_viewer=False):
-        super().__init__('mujoco_simulator')
-        # Set asset directory via environment variable
-        os.environ['MUJOCO_ASSETSDIR'] = os.path.join(
-            get_package_share_directory('legged_rl_control'),
-            'config/assets'
-        )
+    def __init__(self, model_path, render=False):
+        # Check if ROS is initialized
+        if not rclpy.ok():
+            rclpy.init()
+            
+        # Use anonymous name for node to allow multiple instances
+        super().__init__('mujoco_simulator', allow_undeclared_parameters=True)
+        
+        # Initialize MuJoCo model and data
         self.model = mujoco.MjModel.from_xml_path(model_path)
         self.data = mujoco.MjData(self.model)
         
-        # ROS 2 interfaces
-        self.joint_pub = self.create_publisher(JointState, 'joint_states', 10)
+        # Add namespace to prevent topic collisions
+        self.joint_pub = self.create_publisher(
+            JointState, 
+            'joint_states', 
+            qos_profile=10
+        )
         self.imu_pub = self.create_publisher(Imu, 'imu/data', 10)
         self.cmd_sub = self.create_subscription(
             JointState, 'joint_commands', self.cmd_callback, 10)
@@ -28,7 +34,7 @@ class MujocoSimulator(Node):
         self._init_joint_mapping()
 
         # Use direct parameter
-        if launch_viewer:
+        if render:
             self.get_logger().info("Launching MuJoCo viewer")
             self.viewer = viewer.launch_passive(self.model, self.data)
         else:
@@ -104,6 +110,12 @@ class MujocoSimulator(Node):
     def get_joint_positions(self):
         """Returns all joint positions excluding base coordinates"""
         return self.data.qpos[7:]  # Skip base pos/orientation
+
+    def destroy_node(self):
+        """Cleanup before destruction"""
+        if self.viewer:
+            self.viewer.close()
+        super().destroy_node()
 
 def main(args=None):
     rclpy.init(args=args)
