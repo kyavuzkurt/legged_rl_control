@@ -94,50 +94,58 @@ def setup_callbacks(training_config):
 # Add new evaluation function
 def evaluate_model(model_path, robot_config, controller_config, num_episodes=5):
     """Evaluate a trained model with rendering enabled"""
-    rclpy.init()
-    
-    # Enable rendering for evaluation
-    eval_robot_config = robot_config.copy()
-    eval_robot_config["render"] = True
-    
-    print(f"\nEvaluating model: {model_path}")
-    print("Starting visualization... (5 episodes)")
-    
-    # Create evaluation environment
-    env = make_training_env(eval_robot_config, controller_config)
-    model = PPO.load(model_path, env=env)
-    
-    # Evaluation metrics
-    total_rewards = []
-    episode_lengths = []
-    
-    for ep in range(num_episodes):
-        obs = env.reset()
-        done = False
-        ep_reward = 0
-        step_count = 0
+    try:
+        rclpy.init()
         
-        while not done:
-            action, _states = model.predict(obs, deterministic=True)
-            obs, reward, done, info = env.step(action)
-            ep_reward += reward
-            step_count += 1
+        # Enable rendering for evaluation
+        eval_robot_config = robot_config.copy()
+        eval_robot_config["render"] = True
+        
+        print(f"\nEvaluating model: {model_path}")
+        print("Starting visualization... (5 episodes)")
+        
+        # Create single evaluation environment
+        env = DummyVecEnv([lambda: LeggedEnv(eval_robot_config, controller_config)])
+        
+        # Force CPU for evaluation rendering
+        model = PPO.load(model_path, env=env, device='cpu')
+        
+        # Evaluation metrics
+        total_rewards = []
+        episode_lengths = []
+        
+        for ep in range(num_episodes):
+            obs = env.reset()
+            done = np.array([False])
+            ep_reward = 0
+            step_count = 0
             
-            if done:
-                break
-                
-        total_rewards.append(ep_reward)
-        episode_lengths.append(step_count)
-        print(f"Episode {ep+1}: Reward: {ep_reward:.1f}, Steps: {step_count}")
-    
-    env.close()
-    rclpy.shutdown()
-    
-    # Print summary
-    print("\nEvaluation Summary:")
-    print(f"Average Reward: {np.mean(total_rewards):.1f} ± {np.std(total_rewards):.1f}")
-    print(f"Average Episode Length: {np.mean(episode_lengths):.1f} steps")
-    print(f"Total Frames Simulated: {sum(episode_lengths)}")
+            while not done.any():
+                action, _states = model.predict(obs, deterministic=True)
+                obs, reward, done, info = env.step(action)
+                ep_reward += reward[0]  # Extract scalar from array
+                step_count += 1
+                    
+            total_rewards.append(ep_reward)
+            episode_lengths.append(step_count)
+            print(f"Episode {ep+1}: Reward: {ep_reward:.1f}, Steps: {step_count}")
+        
+        # Print summary
+        print("\nEvaluation Summary:")
+        print(f"Average Reward: {np.mean(total_rewards):.1f} ± {np.std(total_rewards):.1f}")
+        print(f"Average Episode Length: {np.mean(episode_lengths):.1f} steps")
+        print(f"Total Frames Simulated: {sum(episode_lengths)}")
+        
+    except Exception as e:
+        print(f"Evaluation failed: {str(e)}")
+    finally:
+        # Ensure proper cleanup order
+        if 'env' in locals():
+            env.close()
+        try:
+            rclpy.shutdown()
+        except Exception as e:
+            print(f"Shutdown error: {str(e)}")
 
 # Modify main training function and add argument parsing
 def train_agent():
