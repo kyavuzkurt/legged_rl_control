@@ -29,7 +29,14 @@ ros2 launch legged_rl_control a1_sim.launch.py
 And you can train a policy with the following command on the workspace:
 
 ```bash
-python3 src/legged_rl_control/scripts/train_a1.py
+# Training
+python scripts/train_a1.py
+
+# Evaluation
+python scripts/train_a1.py --eval --model-path path/to/ppo_model.zip
+
+# Continue training
+python scripts/train_a1.py --continue-training path/to/ppo_checkpoint.zip
 ```
 
 

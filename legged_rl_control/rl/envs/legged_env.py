@@ -12,25 +12,16 @@ import rclpy
 
 class LeggedEnv(gym.Env):
     def __init__(self, config, controller_config=None):
-        # Merge config with defaults
+        # Add default values for critical parameters
         self.config = {
-            "render": False,
-            "num_actions": 12,
-            "obs_dim": 36,
-            **config
+            "min_base_height": 0.15,
+            "max_episode_length": 1000,
+            **config  # User config overrides defaults
         }
-        
-        try:
-            self.sim = MujocoSimulator(
-                self.config["model_path"],
-                self.config.get("render", False)
-            )
-        except rclpy.exceptions.NotInitializedException:
-            rclpy.init()
-            self.sim = MujocoSimulator(
-                self.config["model_path"],
-                self.config.get("render", False)
-            )
+        self.sim = MujocoSimulator(
+            self.config["model_path"],
+            self.config.get("render", False)
+        )
         self.step_count = 0  # Initialize step counter here
         self._setup_spaces()
         self.stationary_steps = 0
@@ -144,6 +135,7 @@ class LeggedEnv(gym.Env):
         return truncated or self.steps >= self._max_episode_steps
 
     def reset(self, seed=None, options=None):
+        # Update the reset method to handle seeding
         super().reset(seed=seed)
         mujoco.mj_resetData(self.model, self.data)
         self.sim.advance()  # Ensure simulation state is updated
@@ -256,11 +248,16 @@ class LeggedEnv(gym.Env):
         return joint_pos_targets
 
     def close(self):
-        """Clean up ROS 2 resources"""
+        """Clean up ROS resources"""
         if hasattr(self, 'sim'):
             self.sim.destroy_node()
-        if rclpy.ok():
             rclpy.shutdown()
+        super().close()
+
+    # Add seed method for compatibility
+    def seed(self, seed=None):
+        self.np_random, seed = gym.utils.seeding.np_random(seed)
+        return [seed]
 
 def make_env(config):
     """Factory function for creating wrapped environments"""
