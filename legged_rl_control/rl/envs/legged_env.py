@@ -16,11 +16,13 @@ class LeggedEnv(gym.Env):
         self.config = {
             "min_base_height": 0.15,
             "max_episode_length": 1000,
+            "env_idx": None,  # Add index parameter
             **config  # User config overrides defaults
         }
         self.sim = MujocoSimulator(
             self.config["model_path"],
-            self.config.get("render", False)
+            self.config.get("render", False),
+            env_idx=self.config["env_idx"]
         )
         self.step_count = 0  # Initialize step counter here
         self._setup_spaces()
@@ -56,6 +58,10 @@ class LeggedEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=(obs_size,))
 
     def _get_obs(self):
+        # Add debug prints
+        if self.config.get("render"):
+            print(f"Base Height: {self.sim.get_base_height():.2f}m")
+            print(f"Joint Positions: {self.sim.data.qpos[7:19]}")
         # Collect raw sensor data
         qpos = self.sim.data.qpos.copy()
         qvel = self.sim.data.qvel.copy()
@@ -104,7 +110,25 @@ class LeggedEnv(gym.Env):
         truncated = self._get_truncated(self._get_obs(), action)
         info = {}
         
-        return self._get_obs(), reward, terminated, truncated, info
+        # Revised reward calculation
+        reward_components = {
+            'base_height': 1.2 * self._base_height_reward(),
+            'orientation': 0.8 * self._orientation_reward(),
+            'symmetry': 0.3 * self._symmetry_reward(),
+            'action_penalty': -0.01 * self._action_penalty_reward(),
+            'leg_activity': 0.05 * self._leg_activity_reward()
+        }
+        
+        # Add survival bonus
+        if not terminated:
+            reward_components['survival'] = 0.1 * (self.step_count / self._max_episode_steps)
+        
+        total_reward = sum(reward_components.values())
+        
+        # Store in info for logging
+        info["rewards"] = reward_components
+        
+        return self._get_obs(), total_reward, terminated, truncated, info
     
     def _get_truncated(self, obs, action):
         truncated = False

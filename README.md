@@ -30,18 +30,18 @@ And you can train a policy with the following command on the workspace:
 
 ```bash
 # Training
-python scripts/train_a1.py
+python src/legged_rl_control/scripts/train_a1.py
 
 # Evaluation
-python scripts/train_a1.py --eval --model-path path/to/ppo_model.zip
+python src/legged_rl_control/scripts/train_a1.py --eval --model-path path/to/ppo_model.zip
 
 # Continue training
-python scripts/train_a1.py --continue-training path/to/ppo_checkpoint.zip
+python src/legged_rl_control/scripts/train_a1.py --continue-training path/to/ppo_checkpoint.zip
 ```
 
 
 ## TODO
-- Add ~~observation space normalization~~ and domain ~~randomization~~
+- Add ~~observation space normalization~~ and ~~domain randomization~~
 - Implement curriculum learning and safety monitoring
 - Improve reward function and policy deployment
 - Add visualization tools and hardware interface

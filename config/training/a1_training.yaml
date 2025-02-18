@@ -1,5 +1,5 @@
 # Training parameters
-total_timesteps: 3000000
+total_timesteps: 2000000
 num_envs: 16  # Number of parallel environments
 
 checkpoint:
@@ -11,11 +11,11 @@ ppo_params:
   policy: "MlpPolicy"
   learning_rate: 3e-4
   n_steps: 2048        # Total steps per update (num_envs * n_steps should be multiple of batch_size)
-  batch_size: 64       # Minibatch size
-  n_epochs: 10         # Number of optimization epochs per update
-  gamma: 0.99          # Discount factor
+  batch_size: 512
+  n_epochs: 8
+  gamma: 0.98          # Discount factor
   gae_lambda: 0.95     # GAE parameter
-  clip_range: 0.2      # PPO clip parameter
-  ent_coef: 0.0        # Entropy regularization coefficient
-  device: "auto"       # Use GPU acceleration
+  clip_range: 0.2
+  ent_coef: 0.005
+  device: "auto"      
   tensorboard_log: "./a1_tensorboard/" 

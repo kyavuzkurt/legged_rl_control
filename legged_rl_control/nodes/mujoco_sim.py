@@ -9,8 +9,12 @@ from mujoco import viewer
 from std_msgs.msg import String
 
 class MujocoSimulator(Node):
-    def __init__(self, model_path, launch_viewer=True):
-        super().__init__('mujoco_simulator')
+    def __init__(self, model_path, render=False, env_idx=None):
+        node_name = "mujoco_simulator"
+        if env_idx is not None:
+            node_name += f"_{env_idx}"
+            
+        super().__init__(node_name)
         # Set asset directory via environment variable
         os.environ['MUJOCO_ASSETSDIR'] = os.path.join(
             get_package_share_directory('legged_rl_control'),
@@ -28,7 +32,7 @@ class MujocoSimulator(Node):
         self._init_joint_mapping()
 
         # Use direct parameter
-        if launch_viewer:
+        if render:
             self.get_logger().info("Launching MuJoCo viewer")
             self.viewer = viewer.launch_passive(self.model, self.data)
         else:
